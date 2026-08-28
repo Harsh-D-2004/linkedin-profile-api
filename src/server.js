@@ -1,6 +1,6 @@
 import express from "express";
 import { fetchProfile } from "./linkedin.js";
-import { sessionState, HttpError } from "./session.js";
+import { sessionState, egressIp, HttpError } from "./session.js";
 import { rateLimitState } from "./rate-limit.js";
 
 const app = express();
@@ -8,6 +8,15 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, ...sessionState(), rateLimit: rateLimitState() });
+});
+
+// What IP does LinkedIn see? The single most useful thing to check on a deploy.
+app.get("/debug/egress", async (_req, res, next) => {
+  try {
+    res.json(await egressIp());
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.post("/api/profile", async (req, res, next) => {

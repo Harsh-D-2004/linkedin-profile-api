@@ -2,13 +2,14 @@
 
 One endpoint. POST a LinkedIn profile URL, get clean profile JSON back.
 
-Uses your `li_at` session cookie against LinkedIn's internal Voyager API — no
-headless browser, no HTML parsing. The raw Voyager response is a 125 KB
-normalized graph; this flattens it to ~10 KB of frontend-ready JSON.
-
 ## API
 
 ```
+Deployed URL :
+POST http://localhost:3000/api/profile
+Content-Type: application/json
+
+Local Deployment :
 POST http://localhost:3000/api/profile
 Content-Type: application/json
 ```
@@ -47,7 +48,12 @@ Content-Type: application/json
     "positions": [
       {
         "title": "Co-chair",
-        "company": { "name": "Gates Foundation", "id": "160297", "url": "…", "logoUrl": "…" },
+        "company": {
+          "name": "Gates Foundation",
+          "id": "160297",
+          "url": "…",
+          "logoUrl": "…"
+        },
         "employmentType": null,
         "location": null,
         "description": null,
@@ -58,19 +64,33 @@ Content-Type: application/json
     ],
     "education": [
       {
-        "school": "Harvard University", "schoolId": "1646", "schoolUrl": "…", "logoUrl": "…",
-        "degree": null, "fieldOfStudy": null, "grade": null, "description": null,
-        "start": "1973", "end": "1975", "current": false
+        "school": "Harvard University",
+        "schoolId": "1646",
+        "schoolUrl": "…",
+        "logoUrl": "…",
+        "degree": null,
+        "fieldOfStudy": null,
+        "grade": null,
+        "description": null,
+        "start": "1973",
+        "end": "1975",
+        "current": false
       }
     ],
     "skills": ["Go (Programming Language)", "…"],
     "certifications": [
-      { "name": "…", "authority": "…", "licenseNumber": "…", "url": "…",
-        "issuedOn": "2021-12", "expiresOn": null }
+      {
+        "name": "…",
+        "authority": "…",
+        "licenseNumber": "…",
+        "url": "…",
+        "issuedOn": "2021-12",
+        "expiresOn": null
+      }
     ]
   },
   "debug": {
-    "raw":   "output/williamhgates.raw.json",
+    "raw": "output/williamhgates.raw.json",
     "clean": "output/williamhgates.clean.json"
   }
 }
@@ -80,14 +100,14 @@ Every call also writes both files to `output/` for debugging.
 
 **Errors**
 
-| HTTP | `code` | Meaning |
-|---|---|---|
-| 400 | `bad_request` | Missing URL, or not a `linkedin.com/in/<slug>` URL |
-| 401 | `linkedin_auth_failed` | `LI_COOKIE` is expired or was revoked — recapture it |
-| 404 | `profile_not_found` | No such profile, or not visible to your account |
-| 429 | `linkedin_throttled` | LinkedIn throttled us — back off |
-| 500 | `not_configured` | `LI_COOKIE` not set |
-| 502 | `linkedin_upstream_error` | Anything else upstream |
+| HTTP | `code`                    | Meaning                                              |
+| ---- | ------------------------- | ---------------------------------------------------- |
+| 400  | `bad_request`             | Missing URL, or not a `linkedin.com/in/<slug>` URL   |
+| 401  | `linkedin_auth_failed`    | `LI_COOKIE` is expired or was revoked — recapture it |
+| 404  | `profile_not_found`       | No such profile, or not visible to your account      |
+| 429  | `linkedin_throttled`      | LinkedIn throttled us — back off                     |
+| 500  | `not_configured`          | `LI_COOKIE` not set                                  |
+| 502  | `linkedin_upstream_error` | Anything else upstream                               |
 
 **Health**
 
