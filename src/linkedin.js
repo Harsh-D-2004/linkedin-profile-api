@@ -39,7 +39,7 @@ function parseProfileUrl(input) {
   return decodeURIComponent(match[1]);
 }
 
-const RETRYABLE = new Set([429, 500, 502, 503, 504, 999]);
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function voyagerGet(url, { referer, attempt = 1, maxAttempts = 3 }) {
@@ -71,8 +71,17 @@ async function voyagerGet(url, { referer, attempt = 1, maxAttempts = 3 }) {
   if (res.status === 401 || res.status === 403) {
     throw new HttpError(401, "linkedin_auth_failed", `LinkedIn returned ${res.status} — cookie rejected or csrf-token mismatch`, { body: body.slice(0, 500) });
   }
-  if (res.status === 429 || res.status === 999) {
-    throw new HttpError(429, "linkedin_throttled", `LinkedIn returned ${res.status} — rate limited or soft-blocked`);
+  // 999 is "Request denied" — LinkedIn blocking the source IP, almost always a
+  // datacenter/cloud ASN. It is not transient and retrying it changes nothing.
+  if (res.status === 999) {
+    throw new HttpError(
+      403,
+      "linkedin_ip_blocked",
+      "LinkedIn returned 999 — the source IP is blocked. Cloud/datacenter IPs (Render, AWS, GCP) are rejected by ASN; use a residential IP or set PROXY_URL to a residential proxy.",
+    );
+  }
+  if (res.status === 429) {
+    throw new HttpError(429, "linkedin_throttled", "LinkedIn returned 429 — rate limited");
   }
   if (res.status === 404) {
     throw new HttpError(404, "profile_not_found", "Profile does not exist or is not visible to this account");

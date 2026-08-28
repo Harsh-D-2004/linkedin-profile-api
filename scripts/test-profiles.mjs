@@ -8,11 +8,10 @@
  * Requests run sequentially and honour the server's 429 + Retry-After, which
  * is what a real client should do. The waits are the rate limiter working.
  */
-const API_BASE = process.env.API_BASE || "http://localhost:3000"
+const API_BASE = process.env.API_BASE || "http://localhost:3000";
 const DEFAULT_URLS = [
   "https://www.linkedin.com/in/williamhgates/",
   "https://www.linkedin.com/in/satyanadella/",
-  "https://www.linkedin.com/in/arpitbhayani/",
 ];
 
 const urls = process.argv.slice(2).length

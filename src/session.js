@@ -13,29 +13,55 @@ export class HttpError extends Error {
   }
 }
 
-// impit's generic `chrome` profile is Chrome 124 on macOS. Pinning chrome151
-// matches a current Chrome's TLS fingerprint and sec-ch-ua; the OS strings are
-// overridden because the profile ships the Windows build. LinkedIn can check
-// the UA against the device that logged in (bscookie), and a session claiming a
-// different OS than its own login is the replayed-cookie signature.
 const impit = new Impit({
   browser: "chrome151",
   proxyUrl: process.env.PROXY_URL || undefined,
   headers: {
-    "user-agent":
-      process.env.LI_USER_AGENT ||
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-    "sec-ch-ua-platform": `"${process.env.LI_PLATFORM || "Linux"}"`,
+    "user-agent": process.env.LI_USER_AGENT,
   },
 });
 
 const WARMUP_TTL_MS = 15 * 60 * 1000;
 const STATE_FILE = path.resolve(process.cwd(), ".session.json");
 const LI_COOKIE = (process.env.LI_COOKIE || "").trim();
+const PROXY_URL = process.env.PROXY_URL || "";
+
+// DEBUG=1 logs every outbound LinkedIn request: what we asked for, what came
+// back, and whether it went through a proxy.
+const debug = process.env.DEBUG
+  ? (...args) => console.log("[linkedin]", ...args)
+  : () => {};
+
+/** Redact credentials before a proxy URL reaches a log or an HTTP response. */
+function safeProxy(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.username ? "***:***@" : ""}${u.host}`;
+  } catch {
+    return "(unparseable)";
+  }
+}
+
+/** What IP does LinkedIn actually see? Goes through the same impit client. */
+export async function egressIp() {
+  try {
+    // ipify is unauthenticated and unmetered; ipinfo rate-limits anonymous callers.
+    const res = await impit.fetch("https://api.ipify.org?format=json");
+    const { ip } = await res.json();
+    return { ip, viaProxy: safeProxy(PROXY_URL) };
+  } catch (err) {
+    return { error: err.message, viaProxy: safeProxy(PROXY_URL) };
+  }
+}
 
 // Saved state belongs to one session: if LI_COOKIE changes, the cookies on disk
 // came from the old (probably revoked) one and must not be carried over.
-const fingerprint = crypto.createHash("sha256").update(LI_COOKIE).digest("hex").slice(0, 16);
+const fingerprint = crypto
+  .createHash("sha256")
+  .update(LI_COOKIE)
+  .digest("hex")
+  .slice(0, 16);
 
 const jar = new CookieJar(LI_COOKIE);
 let warmedAt = 0;
@@ -83,7 +109,10 @@ function trackHeader() {
  */
 function absorb(res) {
   const deleted = jar.applySetCookie(res.headers.getSetCookie());
-  if (deleted.includes("li_at") || res.headers.get("clear-site-data") !== null) {
+  if (
+    deleted.includes("li_at") ||
+    res.headers.get("clear-site-data") !== null
+  ) {
     throw new HttpError(
       401,
       "linkedin_auth_failed",
@@ -101,9 +130,6 @@ function absorb(res) {
 async function warmUp(profileUrl) {
   if (warmedAt && Date.now() - warmedAt < WARMUP_TTL_MS) return;
 
-  // LinkedIn 301s /in/<slug>/ to the no-trailing-slash form. Start there so the
-  // common case is one hop, but follow a couple and absorb cookies at each —
-  // they are set on the hops, not only on the final 200.
   let url = profileUrl.replace(/\/+$/, "");
 
   for (let hop = 0; hop < 3; hop++) {
@@ -122,12 +148,30 @@ async function warmUp(profileUrl) {
       },
     });
 
+    debug(`warm-up hop ${hop}: GET ${url} -> ${res.status}`);
     absorb(res);
-    if (res.status < 300 || res.status >= 400) break;
+
+    // A blocked or errored page load must not count as a successful warm-up,
+    // or warmedAt hides the failure for the next 15 minutes.
+    if (res.status === 999) {
+      throw new HttpError(
+        403,
+        "linkedin_ip_blocked",
+        "LinkedIn returned 999 on warm-up — the source IP is blocked. Use a residential IP or set PROXY_URL.",
+      );
+    }
+    if (res.status >= 400) {
+      throw new HttpError(502, "linkedin_upstream_error", `Warm-up failed with ${res.status}`);
+    }
+    if (res.status < 300) break;
 
     const location = res.headers.get("location") || "";
     if (/authwall|\/login|checkpoint/i.test(location)) {
-      throw new HttpError(401, "linkedin_auth_failed", "Warm-up hit the auth wall — the session is not logged in");
+      throw new HttpError(
+        401,
+        "linkedin_auth_failed",
+        "Warm-up hit the auth wall — the session is not logged in",
+      );
     }
     if (!location) break;
     url = new URL(location, url).toString();
@@ -169,6 +213,7 @@ export async function voyagerFetch(url, { referer }) {
     },
   });
 
+  debug(`voyager: GET ${url} -> ${res.status}`);
   absorb(res);
   persist();
   return res;
@@ -176,6 +221,7 @@ export async function voyagerFetch(url, { referer }) {
 
 export const sessionState = () => ({
   hasSession: jar.has("li_at"),
+  proxy: safeProxy(PROXY_URL),
   cookies: [...jar.cookies.keys()],
   warmedAt: warmedAt ? new Date(warmedAt).toISOString() : null,
 });
