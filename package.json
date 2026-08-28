@@ -1,0 +1,19 @@
+{
+  "name": "linkedin-profile-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One REST endpoint: POST a LinkedIn profile URL, get the profile JSON back. Uses the li_at session cookie against LinkedIn's Voyager API. No browser.",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "test:profiles": "node scripts/test-profiles.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "impit": "^0.14.4"
+  }
+}

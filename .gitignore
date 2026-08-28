@@ -1,0 +1,6 @@
+node_modules/
+.env
+output/*
+!output/.gitkeep
+*.log
+.session.json
